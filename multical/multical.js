@@ -1,76 +1,97 @@
- const {ethers} =require('ethers');
+const Web3 = require('web3');
 const fs = require('fs').promises;
 const path = require('path');
 
-async function main() {
-    const amountIn = ethers.utils.parseUnits("1.0", "ether"); // 1 ETH in Wei
-    const tokenInAddress = "0x0000000000000000000000000000000000000000"; // Placeholder address for the input token
-    const tokenOutAddress = "0x1111111111111111111111111111111111111111"; // Placeholder address for the output token
+let web3, multicallContract;
 
-
-const jsonPath = path.join(__dirname, 'getblock.config.json');
-
-let jsonContent;
-try {
-    jsonContent = await fs.readFile(jsonPath, 'utf8');
-} catch (error) {
-    console.error('Failed to read the configuration file:', error);
-    return; // Exit the function if the file cannot be read
-}
-
-let jsonData;
-try {
-    jsonData = JSON.parse(jsonContent);
-} catch (error) {
-    console.error('Failed to parse the configuration file:', error);
-    return; // Exit the function if the JSON is malformed
-}
-//const jsonContent = await fs.readFile(jsonPath, 'utf8');
-//const jsonData = JSON.parse(jsonContent);
-
-const jsonRpcUrl = `https://go.getblock.io/${jsonData.shared.eth.sepolia.jsonRpc[0]}`;
-
-
-const provider = new ethers.providers.JsonRpcProvider('https://go.getblock.io/ac3e3bfe265c4cefa75a9fa61d25b507');
-
-const multicallAddress = '0xeefBa1e63905eF1D7ACbA5a8513c70307C1cE441';
-const multicallAbi =  [{"inputs":[{"components":[{"internalType":"address","name":"target","type":"address"},{"internalType":"bytes","name":"callData","type":"bytes"}],"internalType":"struct Multicall.Call[]","name":"calls","type":"tuple[]"}],"name":"aggregate","outputs":[{"internalType":"uint256","name":"blockNumber","type":"uint256"},{"internalType":"bytes[]","name":"returnData","type":"bytes[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"blockNumber","type":"uint256"}],"name":"getBlockHash","outputs":[{"internalType":"bytes32","name":"blockHash","type":"bytes32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentBlockCoinbase","outputs":[{"internalType":"address","name":"coinbase","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentBlockDifficulty","outputs":[{"internalType":"uint256","name":"difficulty","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentBlockGasLimit","outputs":[{"internalType":"uint256","name":"gaslimit","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCurrentBlockTimestamp","outputs":[{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"addr","type":"address"}],"name":"getEthBalance","outputs":[{"internalType":"uint256","name":"balance","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getLastBlockHash","outputs":[{"internalType":"bytes32","name":"blockHash","type":"bytes32"}],"stateMutability":"view","type":"function"}];
-
-
-const multicallContract = new ethers.Contract(multicallAddress, multicallAbi, provider);
-
-
-const calls = [
-    {
-        target:' 0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73',
-        callData: ethers.utils.defaultAbiCoder.encode(
-            ['uint256', 'address[]'],
-            [amountIn, [tokenInAddress, tokenOutAddress]]
-        )
-    },
-    {
-        target: 'D43C718714eb63d5aA57B78B54704E256024E',
-        callData: ethers.utils.defaultAbiCoder.encode(
-            ['uint256', 'address[]'],
-            [amountIn, [tokenInAddress, tokenOutAddress]]
-        )
-    }
-  
-];
-
-async function executeMulticall() {
+async function setup() {
+    const jsonPath = path.join(__dirname, 'getblock.config.json');
+    let jsonData;
     try {
-        const [blockNumber, returnData] = await multicallContract.aggregate(calls);
+        const jsonContent = await fs.readFile(jsonPath, 'utf8');
+        jsonData = JSON.parse(jsonContent);
+    } catch (error) {
+        console.error('Error reading or parsing the configuration file:', error);
+        throw error;
+    }
+
+    const jsonRpcUrl = `https://go.getblock.io/${jsonData.shared.eth.sepolia.jsonRpc[0]}`;
+    web3 = new Web3(new Web3.providers.HttpProvider(jsonRpcUrl));
+
+    const multicallAddress = '0xeefBa1e63905eF1D7ACbA5a8513c70307C1cE441';
+    const multicallAbi = [
+        // ABI details omitted for brevity
+    ];
+    multicallContract = new web3.eth.Contract(multicallAbi, multicallAddress);
+}
+
+async function executeMulticall(calls) {
+    try {
+        // Prepare calls for the Multicall contract
+        const formattedCalls = calls.map(call => ({
+            target: call.to,
+            callData: call.data,
+        }));
+
+        // Assuming the Multicall contract has an 'aggregate' function
+        const response = await multicallContract.methods.aggregate(formattedCalls).call();
+        const { blockNumber, returnData } = response;
+
         console.log('Block number:', blockNumber);
         console.log('Return data:', returnData);
-
-       
+        return { blockNumber, returnData };
     } catch (error) {
         console.error('Error executing multicall:', error);
+        throw error;
     }
 }
+
+async function main() {
+    await setup();
+
+    
+    const pool1Address = '0xPool1ContractAddress';
+    const pool2Address = '0xPool2ContractAddress';
+
+    const liquidityPoolAbiFragment = [
+        {
+            "constant": true,
+            "inputs": [],
+            "name": "getReserves",
+            "outputs": [
+                {"name": "_reserve0", "type": "uint112"},
+                {"name": "_reserve1", "type": "uint112"},
+                {"name": "_blockTimestampLast", "type": "uint32"}
+            ],
+            "payable": false,
+            "stateMutability": "view",
+            "type": "function"
+        }
+    ];
+
+    // Encoding function calls
+    const pool1Contract = new web3.eth.Contract(liquidityPoolAbiFragment, pool1Address);
+    const pool1Data = pool1Contract.methods.getReserves().encodeABI();
+
+    const pool2Contract = new web3.eth.Contract(liquidityPoolAbiFragment, pool2Address);
+    const pool2Data = pool2Contract.methods.getReserves().encodeABI();
+
+    const calls = [
+        { to: pool1Address, data: pool1Data },
+        { to: pool2Address, data: pool2Data },
+    ];
+
+    // Execute multicall
+    const result = await executeMulticall(calls);
+
+  const decodedData = result.returnData.map(data =>
+    web3.eth.abi.decodeParameters(['uint112', 'uint112', 'uint32'], data)
+);
+    console.log('Multicall result:', result);
 }
-main().catch(console.error);
 
+if (require.main === module) {
+    main().catch(console.error);
+}
 
-executeMulticall();
+module.exports = { executeMulticall, setup };
