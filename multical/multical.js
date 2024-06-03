@@ -27,13 +27,11 @@ async function setup() {
 
 async function executeMulticall(calls) {
     try {
-        // Prepare calls for the Multicall contract
         const formattedCalls = calls.map(call => ({
             target: call.to,
             callData: call.data,
         }));
 
-        // Assuming the Multicall contract has an 'aggregate' function
         const response = await multicallContract.methods.aggregate(formattedCalls).call();
         const { blockNumber, returnData } = response;
 
@@ -46,48 +44,60 @@ async function executeMulticall(calls) {
     }
 }
 
+async function fetchAndExecuteCalls() {
+    // This function should be adapted to fetch real-time data and construct calls
+    const calls = []; // Populate this array dynamically based on real-time data
+    return await executeMulticall(calls);
+}
+
+async function tradeOnExchange(exchange, action, amount, price) {
+    try {
+        // Placeholder for API call or smart contract interaction
+        console.log(`Executing ${action} on ${exchange} for amount ${amount} at price ${price}`);
+        
+        // Or if using smart contracts: await exchangeContract.methods.trade(action, amount, price).send({ from: account });
+    } catch (error) {
+        console.error(`Failed to execute trade on ${exchange}:`, error);
+    }
+}
+
 async function main() {
     await setup();
 
     
-    const pool1Address = '0xPool1ContractAddress';
-    const pool2Address = '0xPool2ContractAddress';
+    setInterval(async () => {
+        try {
+            const result = await fetchAndExecuteCalls();
+            const decodedData = result.returnData.map(data =>
+                web3.eth.abi.decodeParameters(['uint112', 'uint112', 'uint32'], data)
+            );
+            console.log('Multicall result:', decodedData);
 
-    const liquidityPoolAbiFragment = [
-        {
-            "constant": true,
-            "inputs": [],
-            "name": "getReserves",
-            "outputs": [
-                {"name": "_reserve0", "type": "uint112"},
-                {"name": "_reserve1", "type": "uint112"},
-                {"name": "_blockTimestampLast", "type": "uint32"}
-            ],
-            "payable": false,
-            "stateMutability": "view",
-            "type": "function"
+            // Analyze decodedData for arbitrage opportunities
+            if (decodedData.length >= 2) {
+                const price1 = parseFloat(web3.utils.fromWei(decodedData[0][0].toString()));
+                const price2 = parseFloat(web3.utils.fromWei(decodedData[1][0].toString()));
+
+                console.log(`Price on Exchange 1: ${price1}, Price on Exchange 2: ${price2}`);
+
+                const amountToTrade = '1000000000000000000'; // Example amount (1 token in Wei)
+
+                if (price1 < price2) {
+                    console.log('Arbitrage Opportunity: Buy on Exchange 1 and Sell on Exchange 2');
+                    await tradeOnExchange('Exchange1', 'buy', amountToTrade, price1);
+                    await tradeOnExchange('Exchange2', 'sell', amountToTrade, price2);
+                } else if (price1 > price2) {
+                    console.log('Arbitrage Opportunity: Buy on Exchange 2 and Sell on Exchange 1');
+                    await tradeOnExchange('Exchange2', 'buy', amountToTrade, price2);
+                    await tradeOnExchange('Exchange1', 'sell', amountToTrade, price1);
+                } else {
+                    console.log('No arbitrage opportunity found.');
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch and execute calls:', error);
         }
-    ];
-
-    // Encoding function calls
-    const pool1Contract = new web3.eth.Contract(liquidityPoolAbiFragment, pool1Address);
-    const pool1Data = pool1Contract.methods.getReserves().encodeABI();
-
-    const pool2Contract = new web3.eth.Contract(liquidityPoolAbiFragment, pool2Address);
-    const pool2Data = pool2Contract.methods.getReserves().encodeABI();
-
-    const calls = [
-        { to: pool1Address, data: pool1Data },
-        { to: pool2Address, data: pool2Data },
-    ];
-
-    // Execute multicall
-    const result = await executeMulticall(calls);
-
-  const decodedData = result.returnData.map(data =>
-    web3.eth.abi.decodeParameters(['uint112', 'uint112', 'uint32'], data)
-);
-    console.log('Multicall result:', result);
+    }, 10000); // Run every 10 seconds
 }
 
 if (require.main === module) {
