@@ -1,0 +1,13 @@
+{
+	"shared": {
+		"eth": {
+			"sepolia": {
+				"jsonRpc": [
+					"3358a558e3f14617a0973691c0560302",
+					"5fced694aed641dfaa98799d501887a4",
+					"ac3e3bfe265c4cefa75a9fa61d25b507"
+				]
+			}
+		}
+	}
+}

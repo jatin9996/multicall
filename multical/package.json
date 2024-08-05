@@ -1,0 +1,20 @@
+{
+  "name": "multical",
+  "version": "1.0.0",
+  "description": "",
+  "main": "multical.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ethers": "^6.11.1",
+    "web3": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "jest": "^29.7.0"
+  }
+}
